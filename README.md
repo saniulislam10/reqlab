@@ -13,6 +13,9 @@ A lightweight, browser-based API testing tool for sending HTTP requests, configu
 - **Response Inspection:** View response status, headers, and formatted response bodies.
 - **Performance Metrics:** Monitor response time and response size.
 - **JSON Viewer:** Explore nested JSON responses through an expandable tree structure.
+- **Google Sign-In:** Sign in with a Google account using Firebase Authentication.
+- **Saved Requests:** Save requests to personal Firestore folders and load them later.
+- **Private Libraries:** Firestore rules restrict each user's folders and requests to their account.
 
 ## 🛠️ Tech Stack
 
@@ -20,6 +23,7 @@ A lightweight, browser-based API testing tool for sending HTTP requests, configu
 - React 19
 - TypeScript
 - Tailwind CSS 3
+- Firebase Authentication and Cloud Firestore
 - ESLint
 
 ## 📸 Screenshot
@@ -54,7 +58,7 @@ A lightweight, browser-based API testing tool for sending HTTP requests, configu
    npm install
    ```
 
-4. Start the development server:
+4. Configure Firebase as described below, then start the development server:
 
    ```bash
    npm run dev
@@ -65,6 +69,28 @@ A lightweight, browser-based API testing tool for sending HTTP requests, configu
    ```text
    http://localhost:3000
    ```
+
+### Firebase Setup
+
+ReqLab uses Firebase Authentication for Google sign-in and Cloud Firestore for folders and saved requests.
+
+1. Create a Firebase project and register a **Web app** in Project settings.
+2. In **Authentication → Sign-in method**, enable **Google** and choose a support email.
+3. In **Authentication → Settings → Authorized domains**, add `localhost` for local development and your deployed app's domain (for example, `reqlab.saniulislam.com`) when deploying.
+4. Create a **Cloud Firestore** database.
+5. In **Firestore Database → Rules**, publish the rules from [`firestore.rules`](firestore.rules). The rules only allow signed-in users to access their own data.
+6. Copy `.env.example` to `.env.local` and replace the placeholders using the Firebase Web app configuration from **Project settings → General → Your apps**:
+
+   ```text
+   NEXT_PUBLIC_FIREBASE_API_KEY=
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+   NEXT_PUBLIC_FIREBASE_APP_ID=
+   ```
+
+7. Restart the development server after changing environment variables. Add the same values to your hosting provider's environment settings for production.
+
+The Firebase Web app configuration is used by the browser SDK. Firestore security rules protect stored data; never make the database publicly readable or writable. ReqLab does not save the authorization token entered in the request form. Credential-like headers and query parameters are omitted when saving, but review request bodies before saving if they contain secrets. Do not commit `.env.local` or share OAuth client secrets.
 
 ## 🌐 Live Demo
 
