@@ -1,7 +1,88 @@
 "use client";
+import Link from "next/link";
 import React, { useState } from "react";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+
+type ApiResponse = {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: unknown;
+};
+
+type JsonTreeNodeProps = {
+  value: unknown;
+  label?: string;
+  depth?: number;
+  isLast?: boolean;
+};
+
+function JsonTreeNode({ value, label, depth = 0, isLast = true }: JsonTreeNodeProps) {
+  const comma = isLast ? "" : ",";
+  const labelElement = label !== undefined && (
+    <span className="text-gray-300">{JSON.stringify(label)}: </span>
+  );
+
+  if (value !== null && typeof value === "object") {
+    const isArray = Array.isArray(value);
+    const entries: [string, unknown][] = isArray
+      ? value.map((item, index) => [String(index), item])
+      : Object.entries(value);
+    const openToken = isArray ? "[" : "{";
+    const closeToken = isArray ? "]" : "}";
+
+    if (entries.length === 0) {
+      return (
+        <div>
+          {labelElement}
+          <span className="text-gray-300">{openToken}{closeToken}</span>
+          {comma}
+        </div>
+      );
+    }
+
+    return (
+      <details open={depth < 3}>
+        <summary className="cursor-pointer text-gray-300">
+          {labelElement}
+          {openToken}
+          <span className="json-tree-collapsed text-gray-500">
+            {" "}... {entries.length} {entries.length === 1 ? "item" : "items"} {closeToken}{comma}
+          </span>
+        </summary>
+        <div className="ml-4 border-l border-[#3f3f46] pl-3">
+          {entries.map(([key, child], index) => (
+            <JsonTreeNode
+              key={`${depth}-${key}`}
+              value={child}
+              label={isArray ? undefined : key}
+              depth={depth + 1}
+              isLast={index === entries.length - 1}
+            />
+          ))}
+        </div>
+        <div className="text-gray-300">{closeToken}{comma}</div>
+      </details>
+    );
+  }
+
+  const valueClassName = value === null
+    ? "text-gray-400"
+    : typeof value === "string"
+      ? "text-green-400"
+      : typeof value === "number"
+        ? "text-sky-400"
+        : "text-purple-400";
+
+  return (
+    <div>
+      {labelElement}
+      <span className={valueClassName}>{JSON.stringify(value) ?? "null"}</span>
+      {comma}
+    </div>
+  );
+}
 
 // Add a helper to format bytes
 function formatBytes(bytes: number): string {
@@ -28,7 +109,7 @@ export default function Home() {
   const [headers, setHeaders] = useState("{}");
   const [body, setBody] = useState("");
   const [bodyType, setBodyType] = useState("json"); // new state
-  const [response, setResponse] = useState<any>(null);
+  const [response, setResponse] = useState<ApiResponse | null>(null);
   const [responseTime, setResponseTime] = useState<number | null>(null);
   const [responseSize, setResponseSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,7 +147,7 @@ export default function Home() {
     let parsedHeaders: Record<string, string> = {};
     try {
       parsedHeaders = headers ? JSON.parse(headers) : {};
-    } catch (err) {
+    } catch {
       setError("Invalid JSON in headers");
       setLoading(false);
       return;
@@ -140,260 +221,335 @@ export default function Home() {
         headers: Object.fromEntries(res.headers.entries()),
         body: data,
       });
-    } catch (err: any) {
-      setError(err.message || "Request failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center py-10 px-2 bg-[#18181b]">
-      <div className="w-full max-w-2xl">
-        <h1 className="text-3xl font-bold text-gray-100 mb-8 text-center">API Client</h1>
-        <div className="flex items-center mb-4">
-          <label className="text-gray-200 font-medium mr-3">Split endpoint input</label>
-          <input
-            type="checkbox"
-            checked={useSplitInput}
-            onChange={() => setUseSplitInput(v => !v)}
-            className="w-5 h-5 accent-blue-600"
-          />
+    <div className="app-shell">
+      <header className="topbar">
+        <Link className="brand" href="/" aria-label="ReqLab home">
+          <span className="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+          <span>Req<span className="brand-accent">Lab</span></span>
+        </Link>
+        <div className="topbar-note">
+          <span className="status-dot" />
+          API testing workspace
         </div>
-        <form
-          onSubmit={handleSend}
-          className="bg-[#232329] border border-[#27272a] shadow rounded-xl p-6 space-y-5"
-        >
-          <div className="flex flex-col sm:flex-row sm:space-x-3 space-y-3 sm:space-y-0 items-stretch sm:items-center">
-            <div className="flex-shrink-0">
-              <select
-                className="border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 font-semibold text-gray-100 focus:ring-2 focus:ring-blue-600 outline-none transition"
-                value={method}
-                onChange={e => setMethod(e.target.value)}
-              >
-                {HTTP_METHODS.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-            {useSplitInput ? (
-              <>
-                <div className="flex-1">
-                  <input
-                    className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 font-semibold placeholder-gray-500"
-                    type="text"
-                    placeholder="Base URL (e.g. https://api.example.com)"
-                    value={baseUrl}
-                    onChange={e => setBaseUrl(e.target.value)}
-                    required
-                  />
+      </header>
+
+      <main className="page-content">
+        <section className="intro">
+          <div className="eyebrow"><span className="eyebrow-line" /> A focused workspace for your APIs</div>
+          <h1>Build, send, and inspect<br className="desktop-break" /> every request.</h1>
+          <p>Make HTTP requests, add the details your endpoint needs, and explore the response in one clear workspace.</p>
+        </section>
+
+        <div className="workspace-grid">
+          <div className="primary-column">
+            <section className="panel request-panel" aria-labelledby="request-heading">
+              <div className="panel-heading">
+                <div>
+                  <span className="section-kicker">REQUEST</span>
+                  <h2 id="request-heading">Configure a request</h2>
                 </div>
-                <div className="flex-1">
-                  <input
-                    className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 font-semibold placeholder-gray-500"
-                    type="text"
-                    placeholder="Model (e.g. v1, users)"
-                    value={model}
-                    onChange={e => setModel(e.target.value)}
-                  />
+                <span className="local-badge"><span className="status-dot" /> Ready</span>
+              </div>
+
+              <form onSubmit={handleSend} className="request-form">
+                <div className="request-bar">
+                  <label className="sr-only" htmlFor="http-method">HTTP method</label>
+                  <select
+                    id="http-method"
+                    className={`method-select method-${method.toLowerCase()}`}
+                    value={method}
+                    onChange={e => setMethod(e.target.value)}
+                  >
+                    {HTTP_METHODS.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  {useSplitInput ? (
+                    <div className="split-fields">
+                      <input
+                        className="form-control"
+                        type="text"
+                        aria-label="Base URL"
+                        placeholder="Base URL"
+                        value={baseUrl}
+                        onChange={e => setBaseUrl(e.target.value)}
+                        required
+                      />
+                      <input
+                        className="form-control"
+                        type="text"
+                        aria-label="Path prefix"
+                        placeholder="Path prefix"
+                        value={model}
+                        onChange={e => setModel(e.target.value)}
+                      />
+                      <input
+                        className="form-control"
+                        type="text"
+                        aria-label="Resource path"
+                        placeholder="Resource path"
+                        value={finalPath}
+                        onChange={e => setFinalPath(e.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      id="request-url"
+                      className="form-control url-control"
+                      type="url"
+                      placeholder="Enter request URL"
+                      value={url}
+                      onChange={e => setUrl(e.target.value)}
+                      required
+                    />
+                  )}
+                  <button type="submit" className="send-button" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <span className="loading-spinner" aria-hidden="true" />
+                        Sending
+                      </>
+                    ) : (
+                      <>
+                        Send request
+                        <span aria-hidden="true">↗</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <div className="flex-1">
+
+                <label className="toggle-row">
                   <input
-                    className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 font-semibold placeholder-gray-500"
-                    type="text"
-                    placeholder="Final path (e.g. posts/1)"
-                    value={finalPath}
-                    onChange={e => setFinalPath(e.target.value)}
+                    type="checkbox"
+                    checked={useSplitInput}
+                    onChange={() => setUseSplitInput(v => !v)}
                   />
+                  <span className="toggle-track" aria-hidden="true"><span /></span>
+                  <span>
+                    <strong>Split endpoint input</strong>
+                    <small>Build a URL from a base address and path segments</small>
+                  </span>
+                </label>
+
+                <div className="request-options">
+                  <section className="option-section" aria-labelledby="params-heading">
+                    <div className="option-heading">
+                      <div>
+                        <h3 id="params-heading">Query parameters</h3>
+                        <p>Append key-value pairs to your request URL.</p>
+                      </div>
+                      <button type="button" className="text-button" onClick={handleAddParam}>+ Add parameter</button>
+                    </div>
+                    <div className="parameter-list">
+                      {params.map((p, idx) => (
+                        <div key={idx} className="parameter-row">
+                          <input
+                            className="form-control"
+                            type="text"
+                            aria-label={`Parameter ${idx + 1} key`}
+                            placeholder="Key"
+                            value={p.key}
+                            onChange={e => handleParamChange(idx, "key", e.target.value)}
+                          />
+                          <input
+                            className="form-control"
+                            type="text"
+                            aria-label={`Parameter ${idx + 1} value`}
+                            placeholder="Value"
+                            value={p.value}
+                            onChange={e => handleParamChange(idx, "value", e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="icon-button remove-button"
+                            onClick={() => handleRemoveParam(idx)}
+                            disabled={params.length === 1}
+                            aria-label={`Remove parameter ${idx + 1}`}
+                            title="Remove parameter"
+                          >
+                            −
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="option-section" aria-labelledby="auth-heading">
+                    <div className="option-heading">
+                      <div>
+                        <h3 id="auth-heading">Authorization</h3>
+                        <p>Add a token to the selected request header.</p>
+                      </div>
+                    </div>
+                    <div className="auth-row">
+                      <label className="sr-only" htmlFor="token-type">Token format</label>
+                      <select id="token-type" className="form-control compact-control" value={tokenType} onChange={e => setTokenType(e.target.value)}>
+                        <option value="Bearer">Bearer</option>
+                        <option value="Basic">Basic</option>
+                        <option value="Custom">Custom</option>
+                      </select>
+                      <label className="sr-only" htmlFor="token-key">Authorization header</label>
+                      <select id="token-key" className="form-control compact-control" value={tokenKey} onChange={e => setTokenKey(e.target.value)}>
+                        <option value="Authorization">Authorization</option>
+                        <option value="Administrator">Administrator</option>
+                        <option value="custom">Custom header</option>
+                      </select>
+                      {tokenKey === "custom" && (
+                        <input
+                          className="form-control"
+                          type="text"
+                          aria-label="Custom authorization header name"
+                          placeholder="Header name"
+                          value={customTokenKey}
+                          onChange={e => setCustomTokenKey(e.target.value)}
+                        />
+                      )}
+                      <input
+                        className="form-control token-control"
+                        type="password"
+                        autoComplete="off"
+                        aria-label="Authorization token"
+                        placeholder="Paste token"
+                        value={token}
+                        onChange={e => setToken(e.target.value)}
+                      />
+                    </div>
+                    <p className="field-note">Token is used for this request only and is not saved.</p>
+                  </section>
+
+                  <section className="option-section" aria-labelledby="headers-heading">
+                    <div className="option-heading">
+                      <div>
+                        <h3 id="headers-heading">Request headers</h3>
+                        <p>Enter headers as a JSON object.</p>
+                      </div>
+                    </div>
+                    <textarea
+                      className="form-control code-input"
+                      rows={3}
+                      aria-label="Request headers in JSON"
+                      spellCheck={false}
+                      placeholder="{}"
+                      value={headers}
+                      onChange={e => setHeaders(e.target.value)}
+                    />
+                  </section>
+
+                  {!["GET", "HEAD"].includes(method) && (
+                    <section className="option-section" aria-labelledby="body-heading">
+                      <div className="option-heading body-heading">
+                        <div>
+                          <h3 id="body-heading">Request body</h3>
+                          <p>Choose a format and enter the payload to send.</p>
+                        </div>
+                        <label className="sr-only" htmlFor="body-type">Request body format</label>
+                        <select id="body-type" className="form-control compact-control" value={bodyType} onChange={e => setBodyType(e.target.value)}>
+                          <option value="json">JSON</option>
+                          <option value="text">Text</option>
+                          <option value="html">HTML</option>
+                          <option value="xml">XML</option>
+                          <option value="form">Form URL encoded</option>
+                        </select>
+                      </div>
+                      <textarea
+                        className="form-control code-input"
+                        rows={6}
+                        aria-label="Request body"
+                        spellCheck={false}
+                        placeholder="Enter request body"
+                        value={body}
+                        onChange={e => setBody(e.target.value)}
+                      />
+                      {bodyType === "json" && <p className="field-note">The body must be valid JSON.</p>}
+                      {bodyType === "form" && <p className="field-note">Enter a JSON object; its fields are sent as URL-encoded form data.</p>}
+                    </section>
+                  )}
                 </div>
-              </>
-            ) : (
-              <div className="flex-1">
-                <input
-                  className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 font-semibold placeholder-gray-500"
-                  type="text"
-                  placeholder="Enter request URL"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  required
-                  autoFocus
-                />
+              </form>
+            </section>
+
+            {error && (
+              <div className="error-banner" role="alert">
+                <span className="error-icon" aria-hidden="true">!</span>
+                <div><strong>Request failed</strong><p>{error}</p></div>
               </div>
             )}
-            <div className="flex-shrink-0 flex items-center">
-              <button
-                type="submit"
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow hover:bg-blue-700 focus:ring-2 focus:ring-blue-600 transition disabled:opacity-60 flex items-center gap-2"
-                disabled={loading}
-              >
-                {loading && (
-                  <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-                  </svg>
-                )}
-                {loading ? "Sending..." : "Send"}
-              </button>
-            </div>
+
+            {response && (
+              <section className="panel response-panel" aria-labelledby="response-heading" aria-live="polite">
+                <div className="panel-heading response-heading">
+                  <div>
+                    <span className="section-kicker">RESULT</span>
+                    <h2 id="response-heading">Response</h2>
+                  </div>
+                  <div className="response-metrics">
+                    <span className={`status-badge ${response.status >= 200 && response.status < 400 ? "status-success" : "status-error"}`}>
+                      <span className="status-dot" />{response.status} {response.statusText}
+                    </span>
+                    {responseTime !== null && <span className="metric-chip">{(responseTime / 1000).toFixed(2)} s</span>}
+                    {responseSize !== null && <span className="metric-chip">{formatBytes(responseSize)}</span>}
+                  </div>
+                </div>
+                <details open className="response-disclosure">
+                  <summary>Response headers</summary>
+                  <pre className="response-code">{JSON.stringify(response.headers, null, 2)}</pre>
+                </details>
+                <details open className="response-disclosure">
+                  <summary>Response body</summary>
+                  <div className="response-code response-body">
+                    {typeof response.body === "object" && response.body !== null ? (
+                      <div className="json-tree">
+                        <JsonTreeNode value={response.body} />
+                      </div>
+                    ) : (
+                      <pre>{typeof response.body === "string" ? response.body : JSON.stringify(response.body, null, 2)}</pre>
+                    )}
+                  </div>
+                </details>
+              </section>
+            )}
           </div>
-          {/* Params input */}
-          <div>
-            <label className="block font-medium text-gray-200 mb-1">Query Parameters</label>
-            {params.map((p, idx) => (
-              <div key={idx} className="flex space-x-2 mb-2">
-                <input
-                  className="w-2/5 border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 placeholder-gray-500"
-                  type="text"
-                  placeholder="Key"
-                  value={p.key}
-                  onChange={e => handleParamChange(idx, "key", e.target.value)}
-                />
-                <input
-                  className="w-2/5 border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 placeholder-gray-500"
-                  type="text"
-                  placeholder="Value"
-                  value={p.value}
-                  onChange={e => handleParamChange(idx, "value", e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="px-2 py-1 rounded bg-red-700 text-white font-bold hover:bg-red-800 disabled:opacity-50"
-                  onClick={() => handleRemoveParam(idx)}
-                  disabled={params.length === 1}
-                  title="Remove parameter"
-                >
-                  -
-                </button>
-                {idx === params.length - 1 && (
-                  <button
-                    type="button"
-                    className="px-2 py-1 rounded bg-green-700 text-white font-bold hover:bg-green-800 ml-1"
-                    onClick={handleAddParam}
-                    title="Add parameter"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {/* Token input */}
-          <div>
-            <label className="block font-medium text-gray-200 mb-1">Token</label>
-            <div className="flex flex-col sm:flex-row gap-2 mb-2">
-              <select
-                className="border border-[#3f3f46] bg-[#18181b] rounded px-2 py-1 text-gray-100 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-                value={tokenType}
-                onChange={e => setTokenType(e.target.value)}
-              >
-                <option value="Bearer">Bearer</option>
-                <option value="Basic">Basic</option>
-                <option value="Custom">Custom</option>
-              </select>
-              <select
-                className="border border-[#3f3f46] bg-[#18181b] rounded px-2 py-1 text-gray-100 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-                value={tokenKey}
-                onChange={e => setTokenKey(e.target.value)}
-              >
-                <option value="Authorization">Authorization</option>
-                <option value="Administrator">Administrator</option>
-                <option value="custom">Custom</option>
-              </select>
-              {tokenKey === "custom" && (
-                <input
-                  className="border border-[#3f3f46] bg-[#18181b] rounded px-2 py-1 text-gray-100 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-                  type="text"
-                  placeholder="Custom header key"
-                  value={customTokenKey}
-                  onChange={e => setCustomTokenKey(e.target.value)}
-                />
-              )}
-              <input
-                className="flex-1 border border-[#3f3f46] bg-[#18181b] rounded px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 placeholder-gray-500"
-                type="text"
-                placeholder="Paste your token here"
-                value={token}
-                onChange={e => setToken(e.target.value)}
-              />
+
+          <aside className="panel guide-panel" aria-labelledby="guide-heading">
+            <div className="guide-icon" aria-hidden="true">✦</div>
+            <span className="section-kicker">QUICK START</span>
+            <h2 id="guide-heading">Your first request</h2>
+            <p className="guide-intro">Everything you need to make and inspect an API call.</p>
+            <ol className="guide-steps">
+              <li><span>01</span><div><strong>Choose a method</strong><p>Select GET, POST, PUT, DELETE, or PATCH.</p></div></li>
+              <li><span>02</span><div><strong>Enter an endpoint</strong><p>Paste a URL, or turn on split input to build one from parts.</p></div></li>
+              <li><span>03</span><div><strong>Add request details</strong><p>Set query parameters, authorization, headers, and a body when needed.</p></div></li>
+              <li><span>04</span><div><strong>Send and inspect</strong><p>Review the status, timing, headers, and expandable response data.</p></div></li>
+            </ol>
+            <div className="guide-tip">
+              <span aria-hidden="true">i</span>
+              <p>Requests run from your browser. The target API must allow cross-origin requests (CORS).</p>
             </div>
-          </div>
-          <div>
-            <label className="block font-medium text-gray-200 mb-1">Headers (JSON)</label>
-            <textarea
-              className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 placeholder-gray-500"
-              rows={2}
-              placeholder='{"Content-Type": "application/json"}'
-              value={headers}
-              onChange={e => setHeaders(e.target.value)}
-            />
-          </div>
-          {!["GET", "HEAD"].includes(method) && (
-            <div>
-              <label className="block font-medium text-gray-200 mb-1">Body</label>
-              <div className="flex items-center mb-2 gap-2">
-                <span className="text-gray-400 text-sm">Type:</span>
-                <select
-                  className="border border-[#3f3f46] bg-[#18181b] rounded px-2 py-1 text-gray-100 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-                  value={bodyType}
-                  onChange={e => setBodyType(e.target.value)}
-                >
-                  <option value="json">JSON</option>
-                  <option value="text">Text</option>
-                  <option value="html">HTML</option>
-                  <option value="xml">XML</option>
-                  <option value="form">Form URL Encoded</option>
-                </select>
-              </div>
-              <textarea
-                className="w-full border border-[#3f3f46] bg-[#18181b] rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-blue-600 outline-none transition text-gray-100 placeholder-gray-500"
-                rows={4}
-                placeholder="Request body (raw)"
-                value={body}
-                onChange={e => setBody(e.target.value)}
-              />
-              {bodyType === "json" && (
-                <div className="text-xs text-gray-500 mt-1">Enter valid JSON. Example: {'{"key": "value"}'}</div>
-              )}
-              {bodyType === "form" && (
-                <div className="text-xs text-gray-500 mt-1">Enter a JSON object. Example: {'{"key": "value"}'}</div>
-              )}
-            </div>
-          )}
-        </form>
-        <div className="mt-8">
-          {error && (
-            <div className="bg-red-900/80 text-red-200 p-4 rounded-lg mb-4 border border-red-800 font-semibold shadow">
-              {error}
-            </div>
-          )}
-          {response && (
-            <div className="bg-[#232329] border border-[#27272a] shadow rounded-xl p-5">
-              <div className="mb-3 flex flex-wrap gap-4 items-center">
-                <span className="text-base font-bold text-gray-200">Status:</span>
-                <span className="text-gray-100 font-semibold">{response.status} {response.statusText}</span>
-                {responseTime !== null && (
-                  <span className="text-sm text-gray-400">Response time: <span className="font-bold text-gray-200">{(responseTime / 1000).toFixed(2)} s</span></span>
-                )}
-                {responseSize !== null && (
-                  <span className="text-sm text-gray-400">Size: <span className="font-bold text-gray-200">{formatBytes(responseSize)}</span></span>
-                )}
-              </div>
-              <div className="mb-3">
-                <span className="text-base font-bold text-gray-200">Headers:</span>
-                <pre className="bg-[#18181b] border border-[#27272a] rounded-lg p-3 text-xs overflow-x-auto mt-1 text-gray-300">
-                  {JSON.stringify(response.headers, null, 2)}
-                </pre>
-              </div>
-              <div>
-                <span className="text-base font-bold text-gray-200">Body:</span>
-                <pre className="bg-[#18181b] border border-[#27272a] rounded-lg p-3 text-xs overflow-x-auto mt-1 text-gray-300">
-                  {typeof response.body === "string" ? response.body : JSON.stringify(response.body, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
+          </aside>
         </div>
+      </main>
+
+      <footer className="site-footer">
+        <div className="footer-inner">
+          <div className="footer-credit">
+            <span className="footer-mark" aria-hidden="true">&lt;/&gt;</span>
+            <p><strong>ReqLab</strong><span>Built by Saniul Islam · Full Stack Developer</span></p>
+          </div>
+          <nav className="footer-links" aria-label="Developer links">
+            <a href="https://saniulislam.com" target="_blank" rel="noreferrer">Website <span aria-hidden="true">↗</span></a>
+            <a href="https://github.com/saniulislam10" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+            <a href="https://www.linkedin.com/in/sani10/" target="_blank" rel="noreferrer">LinkedIn <span aria-hidden="true">↗</span></a>
+          </nav>
+        </div>
+      </footer>
     </div>
-    </main>
   );
 }
