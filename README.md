@@ -68,7 +68,7 @@ A lightweight, browser-based API testing tool for sending HTTP requests, configu
 
 ## 🌐 Live Demo
 
-Add your deployed application URL here.
+https://reqlab.saniulislam.com
 
 ## 👨‍💻 Developer
 
